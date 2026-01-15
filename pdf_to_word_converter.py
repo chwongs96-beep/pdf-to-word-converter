@@ -1,5 +1,6 @@
 """
-PDF 到 Word 转换器 - 支持转换、编辑和关键词搜索
+PDF 到 Word 转换器 - 支持文字识别、转换、编辑和关键词搜索
+支持普通PDF和扫描版PDF的文字识别（OCR）
 """
 import os
 from pathlib import Path
@@ -8,6 +9,16 @@ from pdf2docx import Converter
 from docx import Document
 from docx.shared import RGBColor, Pt
 from docx.enum.text import WD_COLOR_INDEX
+import PyPDF2
+
+# OCR相关导入（可选） - 支持文字识别和提取"""
+    
+    def __init__(self):
+        self.converted_file = None
+        self.ocr_available = OCR_AVAILABLE
+    OCR_AVAILABLE = True
+except ImportError:
+    OCR_AVAILABLE = False
 
 
 class PDFToWordConverter:
@@ -15,14 +26,39 @@ class PDFToWordConverter:
     
     def __init__(self):
         self.converted_file = None
-    
-    def convert_pdf_to_word(self, pdf_path: str, word_path: str = None) -> str:
+    heck_pdf_has_text(self, pdf_path: str) -> bool:
         """
-        将 PDF 文件转换为 Word 文档
+        检查PDF是否包含可提取的文字（非扫描版）
+        
+        Args:
+            pdf_path: PDF 文件路径
+            
+        Returns:
+            True 如果包含文字，False 如果是纯图片/扫描版
+        """
+        try:
+            with open(pdf_path, 'rb') as file:
+                pdf_reader = PyPDF2.PdfReader(file)
+                # 检查前几页
+                pages_to_check = min(3, len(pdf_reader.pages))
+                
+                for i in range(pages_to_check):
+                    page = pdf_reader.pages[i]
+                    text = page.extract_text().strip()
+                    if text and len(text) > 50:  # 如果有足够的文字内容
+                        return True
+                return False
+        except:
+            return False
+    
+    def convert_pdf_to_word(self, pdf_path: str, word_path: str = None, use_ocr: bool = None) -> str:
+        """
+        将 PDF 文件转换为 Word 文档（智能识别PDF类型并提取文字）
         
         Args:
             pdf_path: PDF 文件路径
             word_path: 输出的 Word 文件路径（可选）
+            use_ocr: 是否使用OCR（None=自动检测，True=强制OCR，False=不使用OCR）
             
         Returns:
             生成的 Word 文件路径
@@ -34,15 +70,80 @@ class PDFToWordConverter:
         if word_path is None:
             word_path = str(Path(pdf_path).with_suffix('.docx'))
         
+        # 自动检测是否需要OCR
+        if use_ocr is None:
+            has_text = self.check_pdf_has_text(pdf_path)
+            use_ocr = not has_text
+            if use_ocr:
+                print(f"检测到扫描版PDF，将使用OCR识别文字...")
+            else:
+                print(f"检测到文本型PDF，直接提取文字...")
+        
+        # 如果需要OCR但不可用
+        if use_ocr and not self.ocr_available:
+            print("警告: OCR功能未安装，将尝试直接转换...")
+            print("提示: 安装 pytesseract 和 pdf2image 以支持扫描版PDF")
+            use_ocr = False
+        
         try:
-            print(f"正在转换 {pdf_path} 到 {word_path}...")
-            cv = Converter(pdf_path)
-            cv.convert(word_path)
-            cv.close()
-            print(f"转换完成！文件保存在: {word_path}")
-            self.converted_file = word_path
-            return word_path
+            if use_ocr:
+                # 使用OCR方式
+                return self._convert_with_ocr(pdf_path, word_path)
+            else:
+                # 使用标准方式
+                print(f"正在转换 {pdf_path} 到 {word_path}...")
+                print("正在提取PDF文字内容...")
+                cv = Converter(pdf_path)
+                cv.convert(word_path)
+                cv.close()
+                print(f"✓ 文字提取和转换完成！文件保存在: {word_path}")
+                self.converted_file = word_path
+                return word_path
         except Exception as e:
+            raise Exception(f"转换失败: {str(e)}")
+    
+    def _convert_with_ocr(self, pdf_path: str, word_path: str) -> str:
+        """
+        使用OCR方式转换扫描版PDF（识别图片中的文字）
+        
+        Args:
+            pdf_path: PDF 文件路径
+            word_path: 输出的 Word 文件路径
+            
+        Returns:
+            生成的 Word 文件路径
+        """
+        print(f"正在使用OCR识别 {pdf_path} 中的文字...")
+        
+        # 将PDF转换为图片
+        print("步骤 1/3: 将PDF页面转换为图片...")
+        images = convert_from_path(pdf_path, dpi=300)
+        
+        # 创建新的Word文档
+        doc = Document()
+        
+        # 对每一页进行OCR识别
+        print(f"步骤 2/3: 识别文字（共 {len(images)} 页）...")
+        for i, image in enumerate(images, 1):
+            print(f"  正在识别第 {i}/{len(images)} 页...")
+            
+            # 使用Tesseract进行OCR
+            # 支持中文和英文
+            text = pytesseract.image_to_string(image, lang='chi_sim+eng')
+            
+            # 添加到Word文档
+            if i > 1:
+                doc.add_page_break()
+            
+            doc.add_paragraph(text)
+        
+        # 保存Word文档
+        print(f"步骤 3/3: 保存文档...")
+        doc.save(word_path)
+        print(f"✓ OCR识别和转换完成！文件保存在: {word_path}")
+        
+        self.converted_file = word_path
+        return word_path
             raise Exception(f"转换失败: {str(e)}")
     
     def search_keyword(self, word_path: str, keyword: str) -> List[Tuple[int, str]]:
