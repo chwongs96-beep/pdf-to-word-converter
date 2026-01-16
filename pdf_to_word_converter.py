@@ -11,22 +11,23 @@ from docx.shared import RGBColor, Pt
 from docx.enum.text import WD_COLOR_INDEX
 import PyPDF2
 
-# OCR相关导入（可选） - 支持文字识别和提取"""
-    
-    def __init__(self):
-        self.converted_file = None
-        self.ocr_available = OCR_AVAILABLE
+# OCR相关导入（可选）
+try:
+    from pdf2image import convert_from_path
+    import pytesseract
     OCR_AVAILABLE = True
 except ImportError:
     OCR_AVAILABLE = False
 
 
 class PDFToWordConverter:
-    """PDF 转 Word 转换器类"""
+    """PDF 转 Word 转换器类 - 支持文字识别和提取"""
     
     def __init__(self):
         self.converted_file = None
-    heck_pdf_has_text(self, pdf_path: str) -> bool:
+        self.ocr_available = OCR_AVAILABLE
+    
+    def check_pdf_has_text(self, pdf_path: str) -> bool:
         """
         检查PDF是否包含可提取的文字（非扫描版）
         
@@ -144,7 +145,6 @@ class PDFToWordConverter:
         
         self.converted_file = word_path
         return word_path
-            raise Exception(f"转换失败: {str(e)}")
     
     def search_keyword(self, word_path: str, keyword: str) -> List[Tuple[int, str]]:
         """

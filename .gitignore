@@ -43,3 +43,12 @@ Thumbs.db
 # Virtual Environment
 venv/
 env/
+
+# Installation files (too large for git)
+tesseract-installer.exe
+poppler.zip
+*.exe
+*.zip
+poppler_temp/
+install_poppler.ps1
+configure_path.ps1
